@@ -2,7 +2,7 @@ package com.qcloud.cos_migrate_tool.config;
 
 
 public class CopyFromCompetitorConfig extends CommonConfig {
-    private String srcPrefix = "";
+    private String srcPrefix = ""; // 123321
     private String srcBucket;
     private String srcEndpoint = "";
     private String srcAccessKeyId;
