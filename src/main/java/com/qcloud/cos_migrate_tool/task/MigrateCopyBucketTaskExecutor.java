@@ -50,9 +50,14 @@ public class MigrateCopyBucketTaskExecutor extends TaskExecutor {
             srcCred = new BasicCOSCredentials(config.getSrcAk(), config.getSrcSk());
         }
         ClientConfig clientConfig = new ClientConfig(new Region(config.getSrcRegion()));
+
+        // 这里没有像从其他云厂商迁移一样，有setEnableSrcHttps，直接用common里的https设置
         if (config.isEnableHttps()) {
             clientConfig.setHttpProtocol(HttpProtocol.https);
+        } else {
+            clientConfig.setHttpProtocol(HttpProtocol.http);
         }
+
         if (config.getSrcEndpointSuffix() != null) {
             clientConfig.setEndPointSuffix(config.getSrcEndpointSuffix());
         }
