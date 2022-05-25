@@ -12,7 +12,7 @@ import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CopyFromAwsConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -203,7 +203,7 @@ public class MigrateAwsTask extends Task {
 
         // upload file
         try {
-            com.qcloud.cos.model.ObjectMetadata cosMetadata = new com.qcloud.cos.model.ObjectMetadata();
+            com.amazonaws.services.s3.model.ObjectMetadata cosMetadata = new com.amazonaws.services.s3.model.ObjectMetadata();
             if (awsMetaData.getUserMetadata() != null) {
                 cosMetadata.setUserMetadata(awsMetaData.getUserMetadata());
             }

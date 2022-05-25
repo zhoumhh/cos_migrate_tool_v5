@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CopyFromUrllistConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -130,8 +130,8 @@ public class MigrateUrllistTask extends Task {
         
         
         try {
-            com.qcloud.cos.model.ObjectMetadata cosMetadata =
-                    new com.qcloud.cos.model.ObjectMetadata();
+            com.amazonaws.services.s3.model.ObjectMetadata cosMetadata =
+                    new com.amazonaws.services.s3.model.ObjectMetadata();
             cosMetadata.setUserMetadata(headAttr.userMetaMap);
             String requestId = uploadFile(config.getBucketName(), cosPath, localFile,
                     config.getStorageClass(), config.isEntireFileMd5Attached(), cosMetadata, null);

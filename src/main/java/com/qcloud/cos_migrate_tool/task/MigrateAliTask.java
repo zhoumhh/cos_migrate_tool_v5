@@ -14,8 +14,8 @@ import com.aliyun.oss.event.ProgressEventType;
 import com.aliyun.oss.event.ProgressListener;
 import com.aliyun.oss.model.GetObjectRequest;
 import com.aliyun.oss.model.ObjectMetadata;
-import com.qcloud.cos.exception.CosServiceException;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CopyFromAliConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -140,7 +140,7 @@ public class MigrateAliTask extends Task {
         if (config.getRealTimeCompare()) {
             // head
             try {
-                com.qcloud.cos.model.ObjectMetadata dstMeta = this.smallFileTransfer.getCOSClient()
+                com.amazonaws.services.s3.model.ObjectMetadata dstMeta = this.smallFileTransfer.getAmazonS3Client()
                         .getObjectMetadata(config.getBucketName(), cosPath);
 
                 if (dstMeta.getLastModified().after(lastModify)) {
@@ -152,7 +152,7 @@ public class MigrateAliTask extends Task {
                     TaskStatics.instance.addSkipCnt();
                     return;
                 }
-            } catch (CosServiceException e) {
+            } catch (AmazonServiceException e) {
                 if (e.getStatusCode() != 404) {
                     log.error("[fail] task_info: {}, exception: {}", ossRecordElement.buildKey(),
                             e.toString());
@@ -282,8 +282,8 @@ public class MigrateAliTask extends Task {
         }
 
         try {
-            com.qcloud.cos.model.ObjectMetadata cosMetadata =
-                    new com.qcloud.cos.model.ObjectMetadata();
+            com.amazonaws.services.s3.model.ObjectMetadata cosMetadata =
+                    new com.amazonaws.services.s3.model.ObjectMetadata();
             if (aliMetaData.getUserMetadata() != null) {
                 cosMetadata.setUserMetadata(aliMetaData.getUserMetadata());
             }

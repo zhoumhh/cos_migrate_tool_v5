@@ -9,8 +9,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.Semaphore;
 
-import com.qcloud.cos.model.StorageClass;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.services.s3.model.StorageClass;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CopyFromLocalConfig;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
 import com.qcloud.cos_migrate_tool.record.MigrateLocalRecordElement;
@@ -94,7 +94,7 @@ public class MigrateLocalTask extends Task {
         }
 
         try {
-            com.qcloud.cos.model.ObjectMetadata objectMetadata = new com.qcloud.cos.model.ObjectMetadata();
+            com.amazonaws.services.s3.model.ObjectMetadata objectMetadata = new com.amazonaws.services.s3.model.ObjectMetadata();
             String requestId = uploadFile(bucketName, cosPath, localFile, storageClass, entireMd5Attached, objectMetadata, null);
             saveRecord(migrateLocalRecordElement);
             saveRequestId(cosPath, requestId);

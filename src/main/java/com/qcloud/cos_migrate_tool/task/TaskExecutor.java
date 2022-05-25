@@ -18,22 +18,16 @@ import java.util.concurrent.TimeUnit;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
-import com.qcloud.cos.COSClient;
-import com.qcloud.cos.COSEncryptionClient;
-import com.qcloud.cos.ClientConfig;
-import com.qcloud.cos.auth.BasicCOSCredentials;
-import com.qcloud.cos.auth.BasicSessionCredentials;
-import com.qcloud.cos.auth.COSCredentials;
-import com.qcloud.cos.auth.COSStaticCredentialsProvider;
-import com.qcloud.cos.exception.CosClientException;
-import com.qcloud.cos.http.HttpProtocol;
-import com.qcloud.cos.internal.crypto.CryptoConfiguration;
-import com.qcloud.cos.internal.crypto.CryptoMode;
-import com.qcloud.cos.internal.crypto.CryptoStorageMode;
-import com.qcloud.cos.internal.crypto.EncryptionMaterials;
-import com.qcloud.cos.internal.crypto.StaticEncryptionMaterialsProvider;
-import com.qcloud.cos.region.Region;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.Protocol;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.BasicSessionCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CommonConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -55,10 +49,9 @@ public abstract class TaskExecutor {
     protected ExecutorService threadPool;
     protected CommonConfig config;
 
-    protected COSClient cosClient;
+    protected AmazonS3 s3Client;
     protected TransferManager smallFileTransferManager;
     protected TransferManager bigFileTransferManager;
-
 
 
     enum RUN_MODE {
@@ -69,13 +62,13 @@ public abstract class TaskExecutor {
         this.migrateType = migrateType;
         this.config = config;
         this.threadPool = Executors.newFixedThreadPool(config.getTaskExecutorNumber());
-        
+
         log.info("threadNum:{}", config.getTaskExecutorNumber());
-        
+
         this.smallFileUploadExecutorNum = config.getSmallFileExecutorNumber();
         this.bigFileUploadExecutorNum = config.getBigFileExecutorNum();
 
-        COSCredentials cred = null;
+        AWSCredentials cred = null;
         String token = config.getToken();
         // supporting temporary token
         if (token != null && !token.isEmpty()) {
@@ -83,74 +76,54 @@ public abstract class TaskExecutor {
             System.out.println("Use temporary token to put object");
             cred = new BasicSessionCredentials(config.getAk(), config.getSk(), token);
         } else {
-            cred = new BasicCOSCredentials(config.getAk(), config.getSk());
+            cred = new BasicAWSCredentials(config.getAk(), config.getSk());
         }
 
-        //COSCredentials cred = new BasicCOSCredentials(config.getAk(), config.getSk());
-        ClientConfig clientConfig = new ClientConfig(new Region(config.getRegion()));
+        ClientConfiguration clientConfig = new ClientConfiguration();
         if (config.isEnableHttps()) {
-            clientConfig.setHttpProtocol(HttpProtocol.https);
+            clientConfig.setProtocol(Protocol.HTTPS);
+        } else {
+            clientConfig.setProtocol(Protocol.HTTP);
         }
-
-        if (config.getEndpointSuffix() != null) {
-            System.out.println(config.getEndpointSuffix());
-            clientConfig.setEndPointSuffix(config.getEndpointSuffix());
-        }
-        clientConfig.setUserAgent(VersionInfoUtils.getUserAgent());
 
         if (!config.getProxyHost().isEmpty() && config.getProxyPort() > 0) {
-            clientConfig.setHttpProxyIp(config.getProxyHost());
-            clientConfig.setHttpProxyPort(config.getProxyPort());
+            clientConfig.setProxyHost(config.getProxyHost());
+            clientConfig.setProxyPort(config.getProxyPort());
+        }
+
+        String endpoint;
+        if (config.getEndpointSuffix() != null) {
+            endpoint = config.getEndpointSuffix();
+        } else {
+            endpoint = "cos." + config.getRegion() + ".myqcloud.com";
         }
 
         if (config.getClientEncrypt()) {
-            this.cosClient = createEncryptClient(config, cred, clientConfig);
+            String errMsg = new String("not support encryption now");
         } else {
-            this.cosClient = new COSClient(cred, clientConfig);
+            this.s3Client = AmazonS3ClientBuilder.standard()
+                    .disableChunkedEncoding()
+                    .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpoint, config.getRegion()))
+                    .withCredentials(new AWSStaticCredentialsProvider(cred))
+                    .withClientConfiguration(clientConfig)
+                    .build();
         }
 
-        this.smallFileTransferManager = new TransferManager(this.cosClient,
+        this.smallFileTransferManager = new TransferManager(this.s3Client,
                 Executors.newFixedThreadPool(config.getSmallFileExecutorNumber()));
-        
+
         this.smallFileTransferManager.getConfiguration()
                 .setMultipartUploadThreshold(config.getSmallFileThreshold());
-        
-        this.bigFileTransferManager = new TransferManager(this.cosClient,
+
+        this.bigFileTransferManager = new TransferManager(this.s3Client,
                 Executors.newFixedThreadPool(config.getBigFileExecutorNum()));
-        
+
         this.bigFileTransferManager.getConfiguration()
                 .setMultipartUploadThreshold(config.getSmallFileThreshold());
 
         this.bigFileTransferManager.getConfiguration().
                 setMinimumUploadPartSize(config.getBigFileUploadPartSize());
     }
-
-    protected COSClient createEncryptClient(CommonConfig config, COSCredentials cred, ClientConfig clientConfig) {
-        SecretKey symKey = null;
-
-        try {
-            symKey = loadSymmetricAESKey(config.getKeyPath());
-        } catch (Exception e) {
-            throw new CosClientException(e);
-        }
-
-        EncryptionMaterials encryptionMaterials = new EncryptionMaterials(symKey);
-        // 使用AES/CBC模式，并将加密信息存储在文件元信息中.
-        CryptoConfiguration cryptoConf = new CryptoConfiguration(CryptoMode.AesCtrEncryption)
-                .withStorageMode(CryptoStorageMode.ObjectMetadata);
-
-        String encryptIV = config.getEncryptIV();
-        if (encryptIV != null) {
-            cryptoConf.setIV(config.getEncryptIV().getBytes());
-        }
-
-        COSEncryptionClient cosEncryptionClient =
-                new COSEncryptionClient(new COSStaticCredentialsProvider(cred),
-                        new StaticEncryptionMaterialsProvider(encryptionMaterials), clientConfig,
-                        cryptoConf);
-
-		return cosEncryptionClient;
-	}
 
     public static SecretKey loadSymmetricAESKey(String keyPath) throws IOException, NoSuchAlgorithmException,
             InvalidKeySpecException, InvalidKeyException {
@@ -263,7 +236,7 @@ public abstract class TaskExecutor {
             this.recordDb.shutdown();
             this.smallFileTransferManager.shutdownNow();
             this.bigFileTransferManager.shutdownNow();
-            this.cosClient.shutdown();
+            this.s3Client.shutdown();
             if (getRunMode().equals(RUN_MODE.NORMAL)) {
                 printTaskStaticsInfo();
             }

@@ -6,14 +6,13 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 
-import com.qcloud.cos.internal.SkipMd5CheckStrategy;
+import com.amazonaws.services.s3.internal.SkipMd5CheckStrategy;
 import com.qcloud.cos_migrate_tool.config.CommonConfig;
 import com.qcloud.cos_migrate_tool.config.ConfigParser;
 import com.qcloud.cos_migrate_tool.config.CopyBucketConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromAliConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromAwsConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromCompetitorConfig;
-import com.qcloud.cos_migrate_tool.config.CopyFromCspConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromLocalConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromQiniuConfig;
 import com.qcloud.cos_migrate_tool.config.CopyFromUpyunConfig;
@@ -23,7 +22,6 @@ import com.qcloud.cos_migrate_tool.meta.TaskStatics;
 import com.qcloud.cos_migrate_tool.task.MigrateAliTaskExecutor;
 import com.qcloud.cos_migrate_tool.task.MigrateAwsTaskExecutor;
 import com.qcloud.cos_migrate_tool.task.MigrateCopyBucketTaskExecutor;
-import com.qcloud.cos_migrate_tool.task.MigrateCspTaskExecutor;
 import com.qcloud.cos_migrate_tool.task.MigrateLocalCheckTaskExecutor;
 import com.qcloud.cos_migrate_tool.task.MigrateLocalTaskExecutor;
 import com.qcloud.cos_migrate_tool.task.MigrateQiniuTaskExecutor;
@@ -53,8 +51,6 @@ public class App {
             return new MigrateUrllistTaskExecutor((CopyFromUrllistConfig) config);
         } else if (ConfigParser.instance.getMigrateType().equals(MigrateType.MIGRATE_FROM_QINIU)) {
             return new MigrateQiniuTaskExecutor((CopyFromQiniuConfig) config);
-        } else if (ConfigParser.instance.getMigrateType().equals(MigrateType.MIGRATE_FROM_CSP)) {
-            return new MigrateCspTaskExecutor((CopyFromCspConfig) config);
         } else if (ConfigParser.instance.getMigrateType().equals(MigrateType.MIGRATE_FROM_UPYUN)) {
             return new MigrateUpyunTaskExecutor((CopyFromUpyunConfig) config);
         } else {

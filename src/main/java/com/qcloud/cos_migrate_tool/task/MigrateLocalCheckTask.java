@@ -6,8 +6,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.Semaphore;
 
-import com.qcloud.cos.model.ObjectMetadata;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos.utils.CRC64;
 import com.qcloud.cos_migrate_tool.config.CopyFromLocalConfig;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -45,7 +45,7 @@ public class MigrateLocalCheckTask extends Task {
         String localPath = SystemUtils.formatLocalPath(localFile.getPath());
         String cosPath = buildCOSPath(localPath);
         try {
-            ObjectMetadata cosMeta = this.smallFileTransfer.getCOSClient().getObjectMetadata(bucketName, cosPath); 
+            ObjectMetadata cosMeta = this.smallFileTransfer.getAmazonS3Client().getObjectMetadata(bucketName, cosPath);
             //String localCrc64 = calculateCrc64(localFile);
 
             long localLen = localFile.length();

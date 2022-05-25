@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos_migrate_tool.config.CopyFromQiniuConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
@@ -118,8 +118,8 @@ public class MigrateQiniuTask extends Task {
         }
 
         try {
-            com.qcloud.cos.model.ObjectMetadata objectMetadata =
-                    new com.qcloud.cos.model.ObjectMetadata();
+            com.amazonaws.services.s3.model.ObjectMetadata objectMetadata =
+                    new com.amazonaws.services.s3.model.ObjectMetadata();
             if (headAttr.userMetaMap.containsKey("ETag")) {
                 objectMetadata.addUserMetadata("qiniu-etag", headAttr.userMetaMap.get("ETag"));
             }

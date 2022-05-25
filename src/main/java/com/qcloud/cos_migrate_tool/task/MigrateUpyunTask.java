@@ -7,8 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.Semaphore;
 
 import com.UpYun;
-import com.qcloud.cos.exception.CosServiceException;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.transfer.TransferManager;
 import com.qcloud.cos.utils.UrlEncoderUtils;
 import com.qcloud.cos_migrate_tool.config.CopyFromUpyunConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
@@ -87,7 +87,7 @@ public class MigrateUpyunTask extends Task {
         if (config.getRealTimeCompare()) {
             // head
             try {
-                com.qcloud.cos.model.ObjectMetadata dstMeta = this.smallFileTransfer.getCOSClient()
+                com.amazonaws.services.s3.model.ObjectMetadata dstMeta = this.smallFileTransfer.getAmazonS3Client()
                         .getObjectMetadata(config.getBucketName(), cosPath);
 
                 if (dstMeta.getLastModified().after(lastModify)) {
@@ -99,7 +99,7 @@ public class MigrateUpyunTask extends Task {
                     TaskStatics.instance.addSkipCnt();
                     return;
                 }
-            } catch (CosServiceException e) {
+            } catch (AmazonServiceException e) {
                 if (e.getStatusCode() != 404) {
                     log.error("[fail] task_info: {}, exception: {}", upyunRecordElement.buildKey(),
                             e.toString());
@@ -234,7 +234,7 @@ public class MigrateUpyunTask extends Task {
             return;
         }
 
-        com.qcloud.cos.model.ObjectMetadata cosMetadata = new com.qcloud.cos.model.ObjectMetadata();
+        com.amazonaws.services.s3.model.ObjectMetadata cosMetadata = new com.amazonaws.services.s3.model.ObjectMetadata();
         if (((CopyFromUpyunConfig) config).isCompareMd5()) {
             cosMetadata.addUserMetadata("upyun-etag", contentMd5);
         }

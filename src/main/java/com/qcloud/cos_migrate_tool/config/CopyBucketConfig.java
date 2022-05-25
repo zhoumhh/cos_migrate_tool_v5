@@ -3,7 +3,7 @@ package com.qcloud.cos_migrate_tool.config;
 import java.io.File;
 import java.util.regex.Pattern;
 
-import com.qcloud.cos.model.StorageClass;
+import com.amazonaws.services.s3.model.StorageClass;
 import com.qcloud.cos_migrate_tool.utils.PathUtils;
 import com.qcloud.cos_migrate_tool.utils.SystemUtils;
 

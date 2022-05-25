@@ -4,24 +4,22 @@ import java.io.File;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.qcloud.cos.COSClient;
-import com.qcloud.cos.endpoint.SuffixEndpointBuilder;
-import com.qcloud.cos.exception.CosServiceException;
-import com.qcloud.cos.model.CopyObjectRequest;
-import com.qcloud.cos.model.CopyResult;
-import com.qcloud.cos.model.GetObjectRequest;
-import com.qcloud.cos.model.ObjectMetadata;
-import com.qcloud.cos.model.StorageClass;
-import com.qcloud.cos.region.Region;
-import com.qcloud.cos.transfer.Copy;
-import com.qcloud.cos.transfer.TransferManager;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.StorageClass;
+import com.amazonaws.services.s3.transfer.Copy;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.model.CopyResult;
 import com.qcloud.cos_migrate_tool.config.CopyBucketConfig;
 import com.qcloud.cos_migrate_tool.meta.TaskStatics;
 import com.qcloud.cos_migrate_tool.record.MigrateCopyBucketRecordElement;
 import com.qcloud.cos_migrate_tool.record.RecordDb;
 
 public class MigrateCopyBucketTask extends Task {
-    private final COSClient srcCOSClient;
+    private final AmazonS3 srcCOSClient;
     private final String destRegion;
     private final String destBucketName;
     private final String destKey;
@@ -36,12 +34,15 @@ public class MigrateCopyBucketTask extends Task {
 
     public MigrateCopyBucketTask(Semaphore semaphore, CopyBucketConfig config,
             TransferManager smallFileTransfer, TransferManager bigFileTransfer, RecordDb recordDb,
-            COSClient srcCOSClient, String srcKey, long srcSize, String srcEtag, StorageClass srcStorageClass,
+            AmazonS3 srcCOSClient, String srcKey, long srcSize, String srcEtag, StorageClass srcStorageClass,
             String destKey) {
         super(semaphore, config, smallFileTransfer, bigFileTransfer, recordDb);
         this.srcCOSClient = srcCOSClient;
         this.destRegion = config.getRegion();
         this.destBucketName = config.getBucketName();
+        while (destKey.startsWith("/")) {
+            destKey = destKey.substring(1);
+        }
         this.destKey = destKey;
         this.srcRegion = config.getSrcRegion();
         this.srcEndpointSuffx = config.getSrcEndpointSuffix();
@@ -127,18 +128,12 @@ public class MigrateCopyBucketTask extends Task {
             }
         }
 
-        CopyObjectRequest copyObjectRequest = new CopyObjectRequest(new Region(srcRegion),
-                srcBucketName, srcKey, destBucketName, destKey);
-        
+        CopyObjectRequest copyObjectRequest = new CopyObjectRequest(srcBucketName, srcKey, destBucketName, destKey);
+
         if (srcBucketName.equals(destBucketName) && ( destKey.equals("/" + srcKey) || srcKey.equals(destKey)) ) {
             ObjectMetadata newObjectMetadata = new ObjectMetadata();
-            newObjectMetadata.addUserMetadata("x-cos-metadata-directive", "Replaced");
+            newObjectMetadata.addUserMetadata("x-amz-metadata-directive", "Replaced");
             copyObjectRequest.setNewObjectMetadata(newObjectMetadata);
-        }
-        
-        if (srcEndpointSuffx != null && !srcEndpointSuffx.isEmpty()) {
-            SuffixEndpointBuilder sourceEndpointBuilder = new SuffixEndpointBuilder(srcEndpointSuffx);
-            copyObjectRequest.setSourceEndpointBuilder(sourceEndpointBuilder);
         }
         
         copyObjectRequest.setStorageClass(this.config.getStorageClass());
@@ -146,7 +141,7 @@ public class MigrateCopyBucketTask extends Task {
         try {
             Copy copy = smallFileTransfer.copy(copyObjectRequest, srcCOSClient, null);
             CopyResult copyResult = copy.waitForCopyResult();
-            String requestId = copyResult.getRequestId();
+            String requestId = "null";
             saveRecord(migrateCopyBucketRecordElement);
             saveRequestId(destKey, requestId);
             if (this.query_result == RecordDb.QUERY_RESULT.KEY_NOT_EXIST) {
@@ -160,8 +155,8 @@ public class MigrateCopyBucketTask extends Task {
             System.out.println(printMsg);
             log.info(printMsg);
         } catch (Exception e) {
-            if (e instanceof CosServiceException) {
-                if (((CosServiceException) e).getStatusCode() == 405) {
+            if (e instanceof AmazonServiceException) {
+                if (((AmazonServiceException) e).getStatusCode() == 405) {
                     log.info(
                             "try to transfer file for not allowed copy object, task_info: [key: {}], [value: {}], exception: {}",
                             migrateCopyBucketRecordElement.buildKey(),

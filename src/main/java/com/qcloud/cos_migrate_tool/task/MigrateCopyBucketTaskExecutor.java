@@ -8,17 +8,20 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
 
-import com.qcloud.cos.COSClient;
-import com.qcloud.cos.ClientConfig;
-import com.qcloud.cos.auth.BasicCOSCredentials;
-import com.qcloud.cos.auth.BasicSessionCredentials;
-import com.qcloud.cos.auth.COSCredentials;
-import com.qcloud.cos.http.HttpProtocol;
-import com.qcloud.cos.model.COSObjectSummary;
-import com.qcloud.cos.model.ListObjectsRequest;
-import com.qcloud.cos.model.ObjectListing;
-import com.qcloud.cos.model.StorageClass;
-import com.qcloud.cos.region.Region;
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.Protocol;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.BasicSessionCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.StorageClass;
+import com.amazonaws.util.SdkHttpUtils;
 import com.qcloud.cos.utils.UrlEncoderUtils;
 import com.qcloud.cos_migrate_tool.config.CopyBucketConfig;
 import com.qcloud.cos_migrate_tool.config.MigrateType;
@@ -33,7 +36,7 @@ import org.slf4j.LoggerFactory;
 public class MigrateCopyBucketTaskExecutor extends TaskExecutor {
     private static final Logger log = LoggerFactory.getLogger(MigrateCopyBucketTaskExecutor.class);
 
-    private COSClient srcCosClient;
+    private AmazonS3 srcCosClient;
     private String srcRegion;
     private String srcBucketName;
     private String srcCosPath;
@@ -42,29 +45,45 @@ public class MigrateCopyBucketTaskExecutor extends TaskExecutor {
     public MigrateCopyBucketTaskExecutor(CopyBucketConfig config) {
         super(MigrateType.MIGRATE_FROM_COS_BUCKET_COPY, config);
         String src_token = ((CopyBucketConfig) config).getSrcToken();
-        COSCredentials srcCred = null;
+        AWSCredentials srcCred = null;
         if (src_token != null && !src_token.isEmpty()) {
             log.info("Use temporary token to list object");
             System.out.println("Use temporary token to list object");
             srcCred = new BasicSessionCredentials(config.getSrcAk(), config.getSrcSk(), src_token);
         } else {
-            srcCred = new BasicCOSCredentials(config.getSrcAk(), config.getSrcSk());
+            srcCred = new BasicAWSCredentials(config.getSrcAk(), config.getSrcSk());
         }
-        ClientConfig clientConfig = new ClientConfig(new Region(config.getSrcRegion()));
+        ClientConfiguration clientConfig = new ClientConfiguration();
         if (config.isEnableHttps()) {
-            clientConfig.setHttpProtocol(HttpProtocol.https);
+            clientConfig.setProtocol(Protocol.HTTPS);
+        } else {
+            clientConfig.setProtocol(Protocol.HTTP);
         }
-        if (config.getSrcEndpointSuffix() != null) {
-            clientConfig.setEndPointSuffix(config.getSrcEndpointSuffix());
-        }
+
         clientConfig.setConnectionTimeout(5000);
         clientConfig.setSocketTimeout(5000);
 
-        clientConfig.setUserAgent(VersionInfoUtils.getUserAgent());
-        this.srcCosClient = new COSClient(srcCred, clientConfig);
+        String endpoint;
+        if (config.getSrcEndpointSuffix() != null) {
+            endpoint = config.getSrcEndpointSuffix();
+        } else {
+            endpoint = "cos." + config.getRegion() + ".myqcloud.com";
+        }
+
+        this.srcCosClient = AmazonS3ClientBuilder.standard()
+                .disableChunkedEncoding()
+                .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpoint, config.getSrcRegion()))
+                .withCredentials(new AWSStaticCredentialsProvider(srcCred))
+                .withClientConfiguration(clientConfig)
+                .build();
+
         this.srcRegion = config.getSrcRegion();
         this.srcBucketName = config.getSrcBucket();
         this.srcCosPath = config.getSrcCosPath();
+        // For S3 SDK
+        while (this.srcCosPath.startsWith("/")) {
+            this.srcCosPath = this.srcCosPath.substring(1);
+        }
         this.srcFileList = config.getSrcFileList();
     }
 
@@ -93,7 +112,7 @@ public class MigrateCopyBucketTaskExecutor extends TaskExecutor {
     @Override
     public void buildTask() {
 
-        int lastDelimiter = srcCosPath.lastIndexOf("/");
+        int lastDelimiter = srcCosPath.lastIndexOf("/") + 1;
 
         if (!srcFileList.isEmpty()) {
             File file = new File(srcFileList);
@@ -180,15 +199,20 @@ public class MigrateCopyBucketTaskExecutor extends TaskExecutor {
                     while (true) {
                         listObjectsRequest.setMarker(nextMarker);
                         objectListing = srcCosClient.listObjects(listObjectsRequest);
-                        List<COSObjectSummary> cosObjectSummaries =
+                        List<S3ObjectSummary> cosObjectSummaries =
                                 objectListing.getObjectSummaries();
 
-                        for (COSObjectSummary cosObjectSummary : cosObjectSummaries) {
+                        for (S3ObjectSummary cosObjectSummary : cosObjectSummaries) {
                             String srcKey = cosObjectSummary.getKey();
                             String srcEtag = cosObjectSummary.getETag();
                             long srcSize = cosObjectSummary.getSize();
                             String keyName = srcKey.substring(lastDelimiter);
-                            String copyDestKey = config.getCosPath() + keyName;
+                            String copyDestKey;
+                            if (config.getCosPath().length() == 0 || config.getCosPath().endsWith("/")) {
+                                copyDestKey = config.getCosPath() + keyName;
+                            } else {
+                                copyDestKey = config.getCosPath() + "/" + keyName;
+                            }
 
                             MigrateCopyBucketTask task = new MigrateCopyBucketTask(semaphore,
                                     (CopyBucketConfig) config, smallFileTransferManager,

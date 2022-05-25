@@ -5,18 +5,17 @@ import java.io.File;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.qcloud.cos.exception.CosServiceException;
-import com.qcloud.cos.model.AccessControlList;
-import com.qcloud.cos.model.ListPartsRequest;
-import com.qcloud.cos.model.ObjectMetadata;
-import com.qcloud.cos.model.PutObjectRequest;
-import com.qcloud.cos.model.StorageClass;
-import com.qcloud.cos.model.UploadResult;
-import com.qcloud.cos.transfer.PersistableUpload;
-import com.qcloud.cos.transfer.Transfer.TransferState;
-import com.qcloud.cos.transfer.TransferManager;
-import com.qcloud.cos.transfer.TransferProgress;
-import com.qcloud.cos.transfer.Upload;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.model.AccessControlList;
+import com.amazonaws.services.s3.model.ListPartsRequest;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.StorageClass;
+import com.amazonaws.services.s3.transfer.model.UploadResult;
+import com.amazonaws.services.s3.transfer.PersistableUpload;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferProgress;
+import com.amazonaws.services.s3.transfer.Upload;
 import com.qcloud.cos.utils.Md5Utils;
 import com.qcloud.cos_migrate_tool.config.CommonConfig;
 import com.qcloud.cos_migrate_tool.record.RecordDb;
@@ -109,62 +108,20 @@ public abstract class Task implements Runnable {
             if (printCount % 20 == 0) {
                 printTransferProgress(progress, key);
             }
-            if (multipart && byteSent > 0 && !pointSaveFlag) {
-
-                PersistableUpload persistableUploadInfo = upload.getResumeableMultipartUploadId();
-                String multipartUploadId = null;
-                if (persistableUploadInfo != null) {
-                    multipartUploadId = persistableUploadInfo.getMultipartUploadId();
-                    if (multipartUploadId != null) {
-                        pointSaveFlag = this.recordDb.updateMultipartUploadSavePoint(
-                                persistableUploadInfo.getBucketName(),
-                                persistableUploadInfo.getKey(), persistableUploadInfo.getFile(),
-                                mtime, persistableUploadInfo.getPartSize(),
-                                persistableUploadInfo.getMutlipartUploadThreshold(),
-                                persistableUploadInfo.getMultipartUploadId());
-                        if (pointSaveFlag) {
-                            log.info("save point success for multipart upload, key: {}", key);
-                        } else {
-                            log.error("save point failed for multipart upload, key: {}", key);
-                        }
-                    }
-
-                }
-            }
 
         } while (upload.isDone() == false);
         // 结束后在打印下进度
         printTransferProgress(progress, key);
-        // 传输完成, 删除断点信息
-        if (upload.getState() == TransferState.Completed && pointSaveFlag) {
-            PersistableUpload persistableUploadInfo = upload.getResumeableMultipartUploadId();
-            String multipartUploadId = null;
-            if (persistableUploadInfo != null) {
-                multipartUploadId = persistableUploadInfo.getMultipartUploadId();
-                if (multipartUploadId != null) {
-                    boolean deleteFlag = this.recordDb.deleteMultipartUploadSavePoint(
-                            persistableUploadInfo.getBucketName(), persistableUploadInfo.getKey(),
-                            persistableUploadInfo.getFile(), mtime,
-                            persistableUploadInfo.getPartSize(),
-                            persistableUploadInfo.getMutlipartUploadThreshold());
-                    if (deleteFlag) {
-                        log.info("delete point success for multipart upload, key: {}", key);
-                    } else {
-                        log.info("delete point failed for multipart upload, key: {}", key);
-                    }
-                }
-            }
-        }
         UploadResult uploadResult = upload.waitForUploadResult();
-        return uploadResult.getRequestId();
+        return "null";
     }
 
     private boolean isMultipartUploadIdValid(String bucketName, String cosKey, String uploadId) {
         ListPartsRequest listPartsRequest = new ListPartsRequest(bucketName, cosKey, uploadId);
         try {
-            this.bigFileTransfer.getCOSClient().listParts(listPartsRequest);
+            this.bigFileTransfer.getAmazonS3Client().listParts(listPartsRequest);
             return true;
-        } catch (CosServiceException cse) {
+        } catch (AmazonServiceException e) {
             return false;
         }
 
@@ -210,6 +167,10 @@ public abstract class Task implements Runnable {
             StorageClass storageClass, boolean entireMd5Attached, ObjectMetadata objectMetadata,
             AccessControlList acl) throws Exception {
         PutObjectRequest putObjectRequest;
+        // Adjust for S3 SDK
+        while (cosPath.startsWith("/")) {
+            cosPath = cosPath.substring(1);
+        }
         if(localFile.isDirectory()) {
             if(!cosPath.endsWith("/")) {
                 cosPath += "/";
@@ -221,9 +182,6 @@ public abstract class Task implements Runnable {
                     objectMetadata);
         } else {
             putObjectRequest = new PutObjectRequest(bucketName, cosPath, localFile);
-            if (config.getThreadTrafficLimit() > 0) {
-                putObjectRequest.setTrafficLimit(config.getThreadTrafficLimit());
-            }
         }
         putObjectRequest.setStorageClass(storageClass);
 
@@ -277,13 +235,13 @@ public abstract class Task implements Runnable {
 
     public boolean isExistOnCOS(TransferManager transferManager, RecordElement recordElement, String bucketName, String cosPath) {
         try {
-            transferManager.getCOSClient().getObjectMetadata(bucketName, cosPath);
+            transferManager.getAmazonS3Client().getObjectMetadata(bucketName, cosPath);
             String printMsg = String.format("[skip] file on cos, task_info: %s", recordElement.buildKey());
             System.out.println(printMsg);
             log.info("skip! file on cos, task_info: [key: {}], [value: {}]", recordElement.buildKey(),
                     recordElement.buildValue());
             return true;
-        } catch (CosServiceException e) {
+        } catch (AmazonServiceException e) {
             if (e.getStatusCode() == 404) {
                 return false;
             } else if (e.getStatusCode() == 503) {

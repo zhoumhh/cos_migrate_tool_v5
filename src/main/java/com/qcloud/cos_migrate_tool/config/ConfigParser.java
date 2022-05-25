@@ -278,19 +278,6 @@ public class ConfigParser {
             if (!initCopyFromUrllistConfig(prefs, (CopyFromUrllistConfig) config)) {
                 return false;
             }
-        } else if (migrateType.equals(MigrateType.MIGRATE_FROM_CSP)) {
-            if (!checkMigrateCompetitorConfig(prefs, MigrateType.MIGRATE_FROM_CSP)) {
-                return false;
-            }
-            config = new CopyFromCspConfig();
-            if (!initCopyFromCspConfig(prefs, (CopyFromCspConfig) config)) {
-                return false;
-            }
-            
-            if (!config.getBatchTaskPath().isEmpty() && !((CopyFromCspConfig)config).getUrlList().isEmpty()) {
-                System.out.println("You can't both set batchTaskPath and urlList");
-                return false;
-            }
         } else if (migrateType.equals(MigrateType.MIGRATE_FROM_UPYUN)) {
             if (!checkMigrateCompetitorConfig(prefs, MigrateType.MIGRATE_FROM_UPYUN)) {
                 return false;
@@ -845,8 +832,6 @@ public class ConfigParser {
                 sectionName = AWS_SECTION_NAME;
             } else if (this.migrateType == MigrateType.MIGRATE_FROM_QINIU) {
                 sectionName = QINIU_SECTION_NAME;
-            } else if (this.migrateType == MigrateType.MIGRATE_FROM_CSP) {
-                sectionName = CSP_SECTION_NAME;
             } else if (this.migrateType == MigrateType.MIGRATE_FROM_UPYUN) {
                 sectionName = UPYUN_SECTION_NAME;
             } else {
